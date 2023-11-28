@@ -1,0 +1,12 @@
+CountingTree Application
+
+Enter "result_counts" folder/same directory with all the *count.taxonomy files.
+
+Compile like this:
+javac CountingTree.java
+
+Execute like this:
+java CountingTree .
+(don't forget the space- period at the end)
+
+Click in the diagram to expand taxa and visualize counts. 

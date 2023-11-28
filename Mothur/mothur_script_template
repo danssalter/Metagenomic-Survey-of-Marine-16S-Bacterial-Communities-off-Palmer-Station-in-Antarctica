@@ -1,0 +1,100 @@
+#!/bin/bash
+#SBATCH -n 28
+#SBATCH -o stdout_<SAMPLE_DATE>
+#SBATCH -e stderr_<SAMPLE_DATE>
+
+###########     IMPORTANT   ############
+
+# To run this SLURM script, make sure the script is in the same directory as the fastq pair
+# Remember to change all occurences of <SAMPLE_DATE> to the title of the fastq file pair to run the program 
+#
+# For exanmple, if the fastq pair is:
+#                                       Nov_13_R1.fastq
+#                                       Nov_13_R2.fastq
+#
+# Then use "Nov_13" in place of <SAMPLE_DATE>
+#
+#########################################
+
+
+
+# To begin, go to data directory that has folder of fastq files and make 
+# an input file list with make.file()
+
+cd /home/dsalter/mothur     # go to dir with mothur application and all dependencies
+
+./mothur "#make.file(inputdir = <SAMPLE_DATE>)" # fastq pair is in another dir within /mothur with same name as <SAMPLE_DATE>
+
+# The output file is called stability.files
+
+# Now change into data directory with fastq files and input file list
+# Use mothur to make contigs
+
+cd <SAMPLE_DATE>
+
+../mothur "#make.contigs(file=stability.files)"
+
+../mothur "#summary.seqs(fasta=stability.trim.contigs.fasta, count=stability.contigs.count_table)"
+
+# Trim ambiguous bases and restrict max length and homopolymer lengths
+
+../mothur "#screen.seqs(fasta=stability.trim.contigs.fasta, count=stability.contigs.count_table, maxambig=0, maxlength=295, maxhomop=8)"
+
+# Remove duplicates using unique.seqs
+
+../mothur "#unique.seqs(fasta=stability.trim.contigs.good.fasta, count=stability.contigs.good.count_table)"
+
+../mothur "#summary.seqs(count=stability.trim.contigs.good.count_table)"
+
+# Generate alignment info for further screening
+
+../mothur "#align.seqs(fasta=stability.trim.contigs.good.unique.fasta, reference = silva.nr_v138_1.align)"
+
+../mothur "#summary.seqs(fasta=stability.trim.contigs.good.unique.align, count=stability.trim.contigs.good.count_table)"
+
+# Retain sequences that occur in the same region of the primers used in V4 variable region of 16S 
+
+../mothur "#screen.seqs(fasta=stability.trim.contigs.good.unique.align, count=stability.trim.contigs.good.count_table, start=11895, end=25318)"
+
+../mothur "#summary.seqs(fasta=stability.trim.contigs.good.unique.good.align, count=stability.trim.contigs.good.good.count_table)"
+
+# Remove overhangs on ends of sequences, then remove new duplicates created
+
+../mothur "#filter.seqs(fasta=stability.trim.contigs.good.unique.align, vertical=T, trump=.)"
+
+../mothur "#unique.seqs(fasta=stability.trim.contigs.good.unique.filter.fasta, count=stability.trim.contigs.good.count_table)"
+
+# Pre-cluster the sequences by grouping the sequences by distance and sorting them by abundance, allowing up to 2 differences
+# between sequences before they are merged (allow one difference per 100 bp of sequence)
+
+../mothur "#pre.cluster(fasta=stability.trim.contigs.good.unique.filter.unique.fasta, count=stability.trim.contigs.good.unique.filter.count_table, diffs=2)"
+
+../mothur "#summary.seqs(fasta=stability.trim.contigs.good.unique.filter.unique.precluster.fasta, count=stability.trim.contigs.good.unique.filter.unique.precluster.count_table)"
+
+# Classify "undesirable" sequence types (anything not the target, which in this case is Bacteria, i.e. Archaea, Eukarya)
+
+# Once classifed, then remove them
+
+../mothur "#classify.seqs(fasta=stability.trim.contigs.good.unique.filter.unique.precluster.fasta, count=stability.trim.contigs.good.unique.filter.unique.precluster.count_table, reference=trainset9_032012.pds.fasta, taxonomy=trainset9_032012.pds.tax)"
+
+../mothur "#remove.lineage(fasta=stability.trim.contigs.good.unique.filter.unique.precluster.fasta, count=stability.trim.contigs.good.unique.filter.unique.precluster.count_table, taxonomy=stability.trim.contigs.good.unique.filter.unique.precluster.pds.wang.taxonomy, taxon=Chloroplast-Mitochondria-unknown-Archaea-Eukaryota)"
+
+# Now create an updated taxonomy summary file that reflects these removals
+
+../mothur "#summary.tax(taxonomy=stability.trim.contigs.good.unique.filter.unique.precluster.pds.wang.pick.taxonomy, count=stability.trim.contigs.good.unique.filter.unique.precluster.pick.count_table)"
+
+# Rename final files
+
+../mothur "#rename.file(fasta=stability.trim.contigs.good.unique.filter.unique.precluster.pick.fasta, count=stability.trim.contigs.good.unique.filter.unique.precluster.pick.count_table, taxonomy=stability.trim.contigs.good.unique.filter.unique.precluster.pds.wang.pick.taxonomy, prefix=final)"
+
+# Cluster sequences into OTUs using distance cutoff of 0.03
+
+../mothur "#dist.seqs(fasta=final.fasta, cutoff=0.03);cluster(column=final.dist, count=final.count_table)"
+
+# Next we want to know how many sequences are in each OTU from each group
+
+../mothur "#make.shared(list=final.opti_mcc.list, count=final.count_table, label=0.03)"
+
+# Now we get the consensus.taxonomy file that contains each OTU with its size and classification
+
+../mothur "#classify.otu(list=final.opti_mcc.list, count=final.count_table, taxonomy=final.taxonomy, label=0.03)"
